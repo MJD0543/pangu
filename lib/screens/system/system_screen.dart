@@ -12,6 +12,7 @@ import '../../core/strings.dart';
 import 'resource_library_screen.dart';
 import 'history_screen.dart';
 import 'tvbox_subscribe_dialog.dart';
+import 'data_transfer_screen.dart';
 
 class SystemScreen extends StatefulWidget {
   const SystemScreen({super.key});
@@ -125,6 +126,13 @@ class _SystemScreenState extends State<SystemScreen> {
             icon: Icons.subscriptions_outlined,
             showArrow: true,
             onTap: () => _openTvboxSubscribe(context),
+            cardColor: cardColor,
+          ),
+          _buildSettingItem(
+            title: '数据互传',
+            icon: Icons.swap_horiz,
+            showArrow: true,
+            onTap: () => _openDataTransfer(context),
             cardColor: cardColor,
           ),
           const SizedBox(height: 16),
@@ -318,6 +326,12 @@ class _SystemScreenState extends State<SystemScreen> {
   void _openResourceLibrary(BuildContext ctx) {
     Navigator.of(ctx).push(MaterialPageRoute(
       builder: (_) => const ResourceLibraryScreen(),
+    ));
+  }
+
+  void _openDataTransfer(BuildContext ctx) {
+    Navigator.of(ctx).push(MaterialPageRoute(
+      builder: (_) => const DataTransferScreen(),
     ));
   }
 

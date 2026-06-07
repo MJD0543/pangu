@@ -43,6 +43,7 @@ dependencies:
   device_info_plus: ^11.3.3
   lpinyin: ^2.0.3
   encrypt: ^5.0.3
+  qr_flutter: ^4.1.0
 
 dev_dependencies:
   flutter_test:
