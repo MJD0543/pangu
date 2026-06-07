@@ -10,7 +10,7 @@ if not TOKEN:
     print("示例: set GITHUB_TOKEN=ghp_xxx && python upload_assets.py")
     exit(1)
 REPO = "MJD0543/pangu"
-RELEASE_ID = 335539785
+RELEASE_ID = 335584412
 
 def upload_asset(file_path, upload_name):
     """上传文件到 GitHub Release"""
