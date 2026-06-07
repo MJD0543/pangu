@@ -1,0 +1,66 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+*.iml
+.idea/
+.vscode/
+*.lock
+**/__pycache__/
+
+# Temp files
+~.DDF
+*~
+
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.podspec
+
+# macOS
+macos/Pods/
+macos/.symlinks/
+
+# Windows
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugins.cmake
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Linux
+linux/flutter/ephemeral/
+linux/flutter/generated_plugin_registrant.cc
+linux/flutter/generated_plugins.cmake
+
+# Pub cache / Melos
+pubspec.lock
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts (keep ANGLE/libmpv manually)
+build/windows/x64/ANGLE/
+build/windows/x64/libmpv/
+
+# Release artifacts (large binaries not tracked in git)
+release/*.exe
+release/*.zip
+release/*.7z
+release/app_data.zip
+release/build/
+release/dist/
+release/*.spec

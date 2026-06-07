@@ -1,0 +1,31 @@
+# NewPlayer — 严格代码规范
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # ── 代码质量（关键） ──
+    - always_declare_return_types
+    - avoid_unnecessary_containers
+    - avoid_unused_constructor_parameters
+    - cancel_subscriptions
+    - close_sinks
+    - empty_statements
+    - prefer_final_locals
+    - unnecessary_brace_in_string_interps
+    - unnecessary_new
+    - unnecessary_null_in_if_null_operators
+    - use_key_in_widget_constructors
+    - use_super_parameters
+
+    # ── 样式（适度） ──
+    - prefer_single_quotes
+    - sort_child_properties_last
+    - unawaited_futures
+
+analyzer:
+  errors:
+    missing_return: error
+    dead_code: warning
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
