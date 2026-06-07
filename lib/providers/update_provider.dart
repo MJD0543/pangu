@@ -22,7 +22,7 @@ class UpdateProvider extends ChangeNotifier {
   static const _kUpdateUrlKey = 'update_url';
   // 默认指向 GitHub Releases API，用户需替换为自己的仓库地址
   static const _kDefaultUpdateUrl =
-      'https://api.github.com/repos/YOUR_USER/YOUR_REPO/releases/latest';
+      'https://api.github.com/repos/MJD0543/pangu/releases/latest';
 
   String? _updateUrl;
 
