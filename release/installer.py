@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 盘古影视 - 自定义安装器
-内嵌应用数据，提供图形化安装界面
+内嵌应用数据，提供图形化安装界面，支持卸载
 """
 
 import os
@@ -11,8 +11,114 @@ import zipfile
 import shutil
 import threading
 import subprocess
+import ctypes
+import struct
+from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+
+# ==================== 注册表操作（ctypes，无额外依赖） ====================
+
+advapi32 = ctypes.windll.advapi32
+
+# 注册表常量
+HKEY_LOCAL_MACHINE = 0x80000002
+KEY_WRITE = 0x20006
+KEY_WOW64_64KEY = 0x0100
+KEY_WOW64_32KEY = 0x0200
+REG_SZ = 1
+REG_DWORD = 4
+
+def reg_create_key(hkey, subkey, sam_desired):
+    """创建或打开注册表键，返回句柄"""
+    hkey_out = ctypes.c_void_p()
+    disposition = ctypes.c_ulong()
+    result = advapi32.RegCreateKeyExW(
+        ctypes.c_void_p(hkey),
+        ctypes.c_wchar_p(subkey),
+        0,
+        None,
+        0,
+        sam_desired,
+        None,
+        ctypes.byref(hkey_out),
+        ctypes.byref(disposition)
+    )
+    if result == 0:
+        return hkey_out.value
+    return None
+
+def reg_set_value(hkey, value_name, data):
+    """设置注册表字符串值"""
+    if isinstance(data, str):
+        data = data + '\x00'
+        buf = (ctypes.c_wchar * len(data))()
+        for i, c in enumerate(data):
+            buf[i] = c
+        advapi32.RegSetValueExW(
+            hkey,
+            ctypes.c_wchar_p(value_name),
+            0,
+            REG_SZ,
+            ctypes.byref(buf),
+            len(data) * 2
+        )
+
+def reg_set_dword(hkey, value_name, value):
+    """设置注册表 DWORD 值"""
+    advapi32.RegSetValueExW(
+        hkey,
+        ctypes.c_wchar_p(value_name),
+        0,
+        REG_DWORD,
+        ctypes.byref(ctypes.c_ulong(value)),
+        4
+    )
+
+def reg_close_key(hkey):
+    advapi32.RegCloseKey(hkey)
+
+
+def write_uninstall_registry(install_path, uninstall_cmd):
+    """向 HKLM 写入卸载信息，让程序出现在'应用和功能'中"""
+    app_name = "盘古影视"
+    # 尝试 64 位视图
+    hkey = reg_create_key(
+        HKEY_LOCAL_MACHINE,
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%s" % app_name,
+        KEY_WRITE | KEY_WOW64_64KEY
+    )
+    if hkey is None:
+        # 尝试 32 位视图
+        hkey = reg_create_key(
+            HKEY_LOCAL_MACHINE,
+            r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\%s" % app_name,
+            KEY_WRITE | KEY_WOW64_32KEY
+        )
+    if hkey is None:
+        # 降级到 HKCU（当前用户，不需要管理员权限）
+        hkey = reg_create_key(
+            0x80000001,  # HKEY_CURRENT_USER
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\%s" % app_name,
+            KEY_WRITE
+        )
+    if hkey is None:
+        return False
+
+    try:
+        reg_set_value(hkey, "DisplayName", app_name)
+        reg_set_value(hkey, "DisplayVersion", "1.0.0")
+        reg_set_value(hkey, "Publisher", "盘古影视")
+        reg_set_value(hkey, "InstallLocation", install_path)
+        reg_set_value(hkey, "UninstallString", uninstall_cmd)
+        reg_set_value(hkey, "QuietUninstallString", uninstall_cmd)
+        reg_set_dword(hkey, "NoModify", 1)
+        reg_set_dword(hkey, "NoRepair", 1)
+        return True
+    finally:
+        reg_close_key(hkey)
+
 
 # ==================== 工具函数 ====================
 
@@ -42,6 +148,46 @@ def create_windows_shortcut(target_exe, shortcut_path, work_dir):
     return result.returncode == 0
 
 
+def create_uninstall_bat(install_path):
+    """在安装目录生成 uninstall.bat 卸载脚本"""
+    bat_path = os.path.join(install_path, "uninstall.bat")
+    exe_name = "盘古影视.exe"
+    content = f'''@echo off
+chcp 65001 >nul
+echo 正在卸载 {exe_name}...
+echo.
+
+:: 结束运行中的进程
+taskkill /f /im "{exe_name}" >nul 2>&1
+
+:: 删除桌面快捷方式
+set "DESKTOP=%USERPROFILE%\\Desktop"
+if exist "%DESKTOP%\\盘古影视.lnk" del /f /q "%DESKTOP%\\盘古影视.lnk" >nul 2>&1
+
+:: 删除开始菜单项（如果有）
+set "STARTMENU=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs"
+if exist "%STARTMENU%\\盘古影视" rmdir /s /q "%STARTMENU%\\盘古影视" >nul 2>&1
+
+:: 删除安装目录
+echo 正在删除文件...
+cd /d "%TEMP%" 2>nul
+rmdir /s /q "{install_path}" 2>nul
+
+:: 删除注册表项（尝试所有位置）
+reg delete "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\盘古影视" /f >nul 2>&1
+reg delete "HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\盘古影视" /f >nul 2>&1
+reg delete "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\盘古影视" /f >nul 2>&1
+
+echo.
+echo 卸载完成！
+pause
+'''
+    # 写入 UTF-8 with BOM 以便支持中文
+    with open(bat_path, 'w', encoding='utf-8-sig') as f:
+        f.write(content)
+    return bat_path
+
+
 # ==================== 安装器主类 ====================
 
 class InstallerApp:
@@ -53,7 +199,7 @@ class InstallerApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"{self.APP_NAME} - 安装向导")
-        self.root.geometry("520x420")
+        self.root.geometry("520x440")
         self.root.resizable(False, False)
         self.root.configure(bg='#1a1a2e')
 
@@ -78,7 +224,12 @@ class InstallerApp:
 
     def _center_window(self):
         self.root.update_idletasks()
-        w, h = self.root.winfo_width(), self.root.winfo_height()
+        w = self.root.winfo_width()
+        h = self.root.winfo_height()
+        if w <= 1:
+            w = 520
+        if h <= 1:
+            h = 440
         x = (self.root.winfo_screenwidth() // 2) - (w // 2)
         y = (self.root.winfo_screenheight() // 2) - (h // 2)
         self.root.geometry(f'{w}x{h}+{x}+{y}')
@@ -194,14 +345,23 @@ class InstallerApp:
                 total = len(names)
                 for i, name in enumerate(names):
                     zf.extract(name, target)
-                    pct = int((i + 1) / total * 70)
+                    pct = int((i + 1) / total * 50)
                     self._set_status(f"正在解压... ({i + 1}/{total})", pct)
 
-            # 2. 创建快捷方式
+            # 2. 创建卸载脚本
+            self._set_status("正在生成卸载脚本...", 55)
+            uninstall_bat = create_uninstall_bat(target)
+            uninstall_cmd = f'cmd /c "{uninstall_bat}"'
+
+            # 3. 写入注册表（卸载信息）
+            self._set_status("正在注册卸载信息...", 65)
+            write_uninstall_registry(target, uninstall_cmd)
+
+            # 4. 创建桌面快捷方式
             self._set_status("正在创建桌面快捷方式...", 75)
             self._make_shortcut(target)
 
-            # 3. 完成
+            # 5. 完成
             self._set_status("安装完成!", 100)
             self.root.after(0, self._on_success)
 

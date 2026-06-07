@@ -162,13 +162,6 @@ class _SystemScreenState extends State<SystemScreen> {
             cardColor: cardColor,
           ),
           _buildSettingItem(
-            title: S.version,
-            icon: Icons.info_outline,
-            trailingText: _version,
-            onTap: () {},
-            cardColor: cardColor,
-          ),
-          _buildSettingItem(
             title: '检测更新',
             icon: Icons.system_update_outlined,
             trailingText: context.watch<UpdateProvider>().status == UpdateStatus.checking
@@ -179,11 +172,10 @@ class _SystemScreenState extends State<SystemScreen> {
             cardColor: cardColor,
           ),
           _buildSettingItem(
-            title: '更新服务器',
-            icon: Icons.cloud_outlined,
-            trailingText: _formatUpdateUrl(context.watch<UpdateProvider>().updateUrl),
-            showArrow: true,
-            onTap: () => _configureUpdateUrl(context),
+            title: S.version,
+            icon: Icons.info_outline,
+            trailingText: _version,
+            onTap: () {},
             cardColor: cardColor,
           ),
           const SizedBox(height: 40),
@@ -434,89 +426,6 @@ class _SystemScreenState extends State<SystemScreen> {
     }
   }
 
-  // ==================== 更新服务器配置 ====================
-
-  String _formatUpdateUrl(String? url) {
-    if (url == null || url.isEmpty) return '默认（GitHub Releases）';
-    if (url.length <= 36) return url;
-    return '${url.substring(0, 20)}...${url.substring(url.length - 12)}';
-  }
-
-  Future<void> _configureUpdateUrl(BuildContext ctx) async {
-    final prov = ctx.read<UpdateProvider>();
-    final controller = TextEditingController(text: prov.updateUrl ?? '');
-
-    final result = await showDialog<String?>(
-      context: ctx,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('配置更新服务器'),
-        content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '支持格式：\n'
-                '• GitHub Releases：\n'
-                '  https://api.github.com/repos/用户名/仓库名/releases/latest\n'
-                '• 自定义 JSON：\n'
-                '  {"version":"1.0.1","url":"下载地址","changelog":"..."}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                decoration: InputDecoration(
-                  labelText: '服务器地址',
-                  hintText: '留空使用默认（GitHub Releases）',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                ),
-                style: const TextStyle(fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, '_reset'),
-            child: const Text('恢复默认'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, controller.text.trim()),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == '_reset') {
-      await prov.setUpdateUrl('');
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('已恢复默认更新服务器')),
-        );
-      }
-    } else if (result != null) {
-      await prov.setUpdateUrl(result);
-      if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('更新服务器已保存')),
-        );
-      }
-    }
-  }
-
   // ==================== 更新检测/下载/安装 ====================
   Future<void> _checkForUpdatesManually(BuildContext ctx) async {
     final prov = ctx.read<UpdateProvider>();
@@ -561,7 +470,7 @@ class _SystemScreenState extends State<SystemScreen> {
                   Text('新版本：${dialogProv.latestVersion}',
                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                   const SizedBox(height: 8),
-                  if (dialogProv.changelog != null && dialogProv.changelog.isNotEmpty)
+                  if (dialogProv.changelog.isNotEmpty)
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
