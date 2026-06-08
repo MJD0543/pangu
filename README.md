@@ -26,6 +26,37 @@
 
 ---
 
+## 📸 截图
+
+<table>
+  <tr>
+    <td><img src="screenshots/1.png" alt="影视首页" width="100%"></td>
+    <td><img src="screenshots/2.png" alt="播放页面" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center">影视首页</td>
+    <td align="center">播放详情</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/3.png" alt="电视直播" width="100%"></td>
+    <td><img src="screenshots/4.png" alt="系统设置" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center">电视直播</td>
+    <td align="center">系统设置</td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/5.png" alt="软件许可" width="100%"></td>
+    <td><img src="screenshots/6.png" alt="软件关于" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center">软件许可</td>
+    <td align="center">软件关于</td>
+  </tr>
+</table>
+
+---
+
 ## 📦 下载
 
 👉 [**最新 Release**](https://github.com/MJD0543/pangu/releases/latest)
