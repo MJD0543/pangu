@@ -30,6 +30,7 @@ class _SystemScreenState extends State<SystemScreen> {
     _loadVersion();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkSilentUpdate();
+      context.read<SourceProvider>().loadTeenModeSettings();
     });
   }
 
@@ -114,6 +115,7 @@ class _SystemScreenState extends State<SystemScreen> {
           const SizedBox(height: 16),
           // Section: Server
           _buildSectionTitle(S.server),
+          _buildTeenModeItem(cardColor),
           _buildSettingItem(
             title: S.resourceLibrary,
             icon: Icons.storage_outlined,
@@ -141,7 +143,7 @@ class _SystemScreenState extends State<SystemScreen> {
           _buildSettingItem(
             title: S.core,
             icon: Icons.memory_outlined,
-            trailingText: 'MPV (media_kit)',
+            trailingText: 'MPV',
             onTap: () {},
             cardColor: cardColor,
           ),
@@ -152,31 +154,14 @@ class _SystemScreenState extends State<SystemScreen> {
             title: S.homepage,
             icon: Icons.open_in_browser,
             showArrow: true,
-            onTap: () => _launchUrl('https://github.com'),
+            onTap: () => _launchUrl('https://github.com/MJD0543/pangu'),
             cardColor: cardColor,
           ),
           _buildSettingItem(
             title: S.license,
             icon: Icons.description_outlined,
             showArrow: true,
-            onTap: () => _showLicensePage(context),
-            cardColor: cardColor,
-          ),
-          _buildSettingItem(
-            title: S.sponsor,
-            icon: Icons.favorite_outline,
-            showArrow: true,
-            onTap: () => _showSponsorDialog(context),
-            cardColor: cardColor,
-          ),
-          _buildSettingItem(
-            title: '检测更新',
-            icon: Icons.system_update_outlined,
-            trailingText: context.watch<UpdateProvider>().status == UpdateStatus.checking
-                ? '检测中...'
-                : null,
-            showArrow: true,
-            onTap: () => _checkForUpdatesManually(context),
+            onTap: () => _showLicenseDialog(context),
             cardColor: cardColor,
           ),
           _buildSettingItem(
@@ -302,6 +287,117 @@ class _SystemScreenState extends State<SystemScreen> {
     );
   }
 
+  Widget _buildTeenModeItem(Color cardColor) {
+    // Ensure settings are loaded (call once via the initState)
+    return Consumer<SourceProvider>(
+      builder: (ctx, srcProv, _) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: SwitchListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.only(left: 16, right: 12),
+            secondary: const Icon(Icons.family_restroom, size: 18, color: AppTheme.primaryColor),
+            title: Text(S.teenMode, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            value: srcProv.teenModeEnabled,
+            onChanged: (val) {
+              if (val) {
+                _showTeenModeEnableDialog(ctx, srcProv);
+              } else {
+                _showTeenModeDisableDialog(ctx, srcProv);
+              }
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showTeenModeEnableDialog(BuildContext ctx, SourceProvider srcProv) {
+    final pwdCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: Text(S.teenModeEnable),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: pwdCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: S.teenModeSetPassword,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmCtrl,
+              obscureText: true,
+              decoration: InputDecoration(
+                labelText: S.teenModeConfirmPassword,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(S.cancel)),
+          ElevatedButton(
+            onPressed: () {
+              final pwd = pwdCtrl.text.trim();
+              if (pwd.isEmpty || pwd != confirmCtrl.text.trim()) {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(S.teenModePasswordMismatch)));
+                return;
+              }
+              srcProv.enableTeenMode(pwd);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(S.teenModeEnabledHint)));
+            },
+            child: Text(S.confirm),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTeenModeDisableDialog(BuildContext ctx, SourceProvider srcProv) {
+    final pwdCtrl = TextEditingController();
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: Text(S.teenModeDisableConfirm),
+        content: TextField(
+          controller: pwdCtrl,
+          obscureText: true,
+          decoration: InputDecoration(
+            labelText: S.teenModeEnterPassword,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(S.cancel)),
+          ElevatedButton(
+            onPressed: () async {
+              final success = await srcProv.disableTeenMode(pwdCtrl.text.trim());
+              if (success) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('青少年模式已关闭')));
+              } else {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(S.teenModeWrongPassword)));
+              }
+            },
+            child: Text(S.confirm),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildThemeChip(String label, bool selected, VoidCallback onTap) {
     return GestureDetector(
       onTap: onTap,
@@ -376,12 +472,31 @@ class _SystemScreenState extends State<SystemScreen> {
     );
   }
 
-  void _showSponsorDialog(BuildContext ctx) {
+  void _showLicenseDialog(BuildContext ctx) {
+    final isDark = Theme.of(ctx).brightness == Brightness.dark;
     showDialog(
       context: ctx,
       builder: (ctx2) => AlertDialog(
-        title: Text(S.sponsorSupport),
-        content: Text(S.sponsorContent),
+        title: Text(S.license),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _licenseText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.7,
+                    color: isDark ? Colors.white.withValues(alpha: 0.85) : Colors.black.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx2),
@@ -391,6 +506,50 @@ class _SystemScreenState extends State<SystemScreen> {
       ),
     );
   }
+
+  static const _licenseText = '''欢迎使用 [盘古影视]（以下简称"本应用"）！
+
+在使用本应用之前，请仔细阅读并理解本免责声明。使用本应用即表示您已完全接受并同意遵守本声明的所有条款和条件。如果您不同意本声明中的任何条款，请停止使用本应用。
+
+1. 应用功能说明
+
+本应用是一款免费工具，旨在为用户提供便捷的方式，通过用户自行配置的苹果CMS、IPTV等服务来展示、搜索和播放影片。本应用本身不托管、存储或分发任何影视内容，也不提供任何影视资源或相关链接。所有内容的获取、展示和播放均由用户提供的苹果CMS、IPTV服务决定。
+
+2. 数据收集与隐私保护
+
+本应用严格遵守隐私保护原则，不会收集、存储或传输任何用户的个人信息或数据。您的所有操作（如连接到苹果CMS、IPTV等服务）均在本地设备上完成，且所有数据流均直接与您所配置的服务进行交互，本应用不会对数据进行任何形式的记录或转发。
+
+3. 内容来源的责任
+
+本应用仅为技术工具，不参与也未授权任何内容的分发或传播。您通过本应用查看或播放的任何内容，均来源于您自行配置的苹果CMS、IPTV等服务。您需要确保这些服务中包含的内容是合法的，并符合您所在地区的法律法规。对于任何非法内容或未经授权的使用行为，本应用概不负责。
+
+4. 版权与合法性
+
+本应用尊重知识产权和版权法律。请您确保通过本应用访问的内容具有合法的版权许可或观看权限。如因观看或使用未经授权的内容而引发的任何法律纠纷或责任，均由用户自行承担，与本应用及其开发者无关。
+
+5. 技术支持与责任限制
+
+本应用尽力提供稳定、可靠的技术支持，但不对以下事项承担责任：
+
+- 您使用的苹果CMS、IPTV等服务的可用性、稳定性或安全性；
+- 因网络问题或第三方服务故障导致的播放中断或其他问题；
+- 您设备上的任何数据丢失或损坏；
+- 因使用本应用而导致的任何直接、间接、特殊或衍生性损失。
+
+6. 用户责任
+
+作为本应用的用户，您需对自己的行为负责。请确保您：
+
+- 配置的内容服务符合当地法律法规；
+- 对通过本应用访问的内容享有合法的观看权限；
+- 妥善保管自己的账户信息和密码，防止未经授权的使用。
+
+7. 更新与修改
+
+我们保留随时修改本免责声明的权利。如有任何更新，我们将通过适当的方式通知您。您继续使用本应用即视为接受更新后的免责声明。
+
+
+感谢您选择 [盘古影视]！我们希望为您提供一个安全、便捷的观影体验。请务必合法、合规地使用本应用。''';
 
   Future<void> _clearCache(BuildContext ctx) async {
     final confirm = await showDialog<bool>(

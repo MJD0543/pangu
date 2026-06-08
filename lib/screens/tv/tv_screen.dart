@@ -51,8 +51,10 @@ class _TvScreenState extends State<TvScreen> {
         final src = srcProv.activeTvSource;
         if (src == null) return _buildNoSource(ctx);
 
-        // 源切换由 onSourceChanged 回调中的 _loadIfNeeded 处理
-        // 不在 build 中自动触发，避免与 initState/didUpdateWidget 中的 _loadIfNeeded 重复
+        // 当源就绪且尚未加载时，触发加载（defer 到下一帧避免 build 中改状态）
+        if (src.id != _lastLoadedSourceId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _loadIfNeeded());
+        }
 
         if (tvProv.isLoading) {
           return const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -97,7 +99,7 @@ class _TvScreenState extends State<TvScreen> {
       onShowChannelList: () => setState(() => _showChannelPanel = true),
       onPrevChannel: () => _prevChannel(tvProv),
       onNextChannel: () => _nextChannel(tvProv),
-      tvSources: srcProv.tvSources,
+      tvSources: srcProv.visibleTvSources,
       activeTvSource: srcProv.activeTvSource,
       onSourceChanged: (s) {
         srcProv.setActiveTvSource(s);

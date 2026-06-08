@@ -32,12 +32,12 @@ class S {
   static const selectSourceType = '选择源类型';
 
   // Main Navigation
-  static const movie = '影视';
+  static const movie = '首页';
   static const tv = '电视';
   static const system = '系统';
 
   // Movie Screen
-  static const searchMovie = '搜索影视...';
+  static const searchMovie = '搜索...';
   static const noMovieSource = '暂无影视源';
   static const addMovieSource = '请在「设置」中添加影视源';
   static const noResult = '没有找到相关内容';
@@ -47,6 +47,8 @@ class S {
   static const singleLetterSearch = '字母/数字搜索';
   static const browseHistory = '浏览记录';
   static const noHistory = '暂无浏览记录';
+  static const guessYouSearch = '猜你想搜';
+  static const searchHistory = '搜索历史';
 
   // Movie Player
   static const noPlayUrl = '暂无播放地址';
@@ -75,15 +77,21 @@ class S {
   static const language = '语言';
   static const watchHistory = '浏览记录';
   static const server = '服务器';
+  static const teenMode = '青少年模式';
+  static const teenModeEnable = '开启青少年模式';
+  static const teenModeSetPassword = '请设置密码';
+  static const teenModeEnterPassword = '请输入密码';
+  static const teenModeConfirmPassword = '请再次输入密码';
+  static const teenModePasswordMismatch = '两次密码不一致';
+  static const teenModeWrongPassword = '密码错误';
+  static const teenModeEnabledHint = '青少年模式已开启，资源列表可设置隐藏源';
+  static const teenModeDisableConfirm = '关闭青少年模式需要验证密码';
   static const resourceLibrary = '资源库';
   static const player = '播放器';
   static const core = '内核';
   static const about = '关于';
   static const homepage = '软件主页';
   static const license = '软件协议';
-  static const sponsor = '赞助';
-  static const sponsorSupport = '赞助支持';
-  static const sponsorContent = '感谢您对 盘古影视 的支持！\n\n本项目为开源免费软件，如果您觉得有帮助，欢迎通过以下方式赞助开发者：\n\n• GitHub Sponsors\n• 支付宝 / 微信支付\n\n您的支持是我们持续改进的动力。';
   static const appName = '盘古影视';
   static const clearCache = '清理缓存';
   static const cacheCleared = '缓存已清理';
@@ -120,11 +128,22 @@ class S {
   // TVBOX
   static const tvboxSubscribe = 'TVBOX订阅导入';
   static const tvboxSubscribeUrl = '订阅链接';
-  static const tvboxSubscribeHint = 'https://example.com/zy.json';
+  static const tvboxSubscribeHint = '支持 JSON/M3U/TXT/代码仓源';
   static const tvboxImporting = '正在解析并检测源...';
   static const tvboxImportStart = '开始导入';
   static const tvboxImportNoValidSource = '未找到有效的源地址';
   static const tvboxParseError = '解析失败，请检查链接是否正确';
+  static const tvboxSmartConvert = '智能识别中...';
+  static const tvboxDetecting = '正在检测可用性';
+  static const tvboxDetectDone = '检测完成';
+  static const tvboxDetectFormat = '识别为%s格式';
+  static const tvboxFormatJson = 'TVBOX JSON';
+  static const tvboxFormatM3u = 'M3U 直播源';
+  static const tvboxFormatTxt = 'TXT 源列表';
+  static const tvboxFormatPlain = '纯文本列表';
+  static const tvboxParseBtn = '解析';
+  static const tvboxReadyImport = '检测完成，可以导入';
+  static const tvboxPleaseWait = '请等待检测完成';
 
   // History
   static const clearHistory = '清空记录';

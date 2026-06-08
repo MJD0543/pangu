@@ -126,6 +126,74 @@ class SourceProvider extends ChangeNotifier {
     await _db.reorderSources(ids);
     await loadSources();
   }
+
+  // ========== 青少年模式 ==========
+  bool _teenModeEnabled = false;
+  String _teenModePassword = '';
+  Set<String> _hiddenSourceIds = {};
+  bool _teenModeLoaded = false;
+
+  bool get teenModeEnabled => _teenModeEnabled;
+  String get teenModePassword => _teenModePassword;
+  Set<String> get hiddenSourceIds => _hiddenSourceIds;
+
+  List<VideoSource> get visibleMovieSources =>
+      _teenModeEnabled ? _movieSources.where((s) => !_hiddenSourceIds.contains(s.id)).toList() : _movieSources;
+
+  List<VideoSource> get visibleTvSources =>
+      _teenModeEnabled ? _tvSources.where((s) => !_hiddenSourceIds.contains(s.id)).toList() : _tvSources;
+
+  Future<void> loadTeenModeSettings() async {
+    if (_teenModeLoaded) return;
+    _teenModeLoaded = true;
+    final prefs = await SharedPreferences.getInstance();
+    _teenModeEnabled = prefs.getBool('teen_mode_enabled') ?? false;
+    _teenModePassword = prefs.getString('teen_mode_password') ?? '';
+    final hidden = prefs.getStringList('hidden_source_ids') ?? [];
+    _hiddenSourceIds = hidden.toSet();
+    notifyListeners();
+  }
+
+  Future<bool> enableTeenMode(String password) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('teen_mode_enabled', true);
+    await prefs.setString('teen_mode_password', password);
+    _teenModeEnabled = true;
+    _teenModePassword = password;
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> disableTeenMode(String password) async {
+    if (_teenModePassword.isNotEmpty && password != _teenModePassword) {
+      return false;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('teen_mode_enabled', false);
+    await prefs.setString('teen_mode_password', '');
+    _teenModeEnabled = false;
+    _teenModePassword = '';
+    _hiddenSourceIds.clear();
+    await prefs.remove('hidden_source_ids');
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> toggleHiddenSource(String sourceId) async {
+    if (_hiddenSourceIds.contains(sourceId)) {
+      _hiddenSourceIds.remove(sourceId);
+    } else {
+      _hiddenSourceIds.add(sourceId);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('hidden_source_ids', _hiddenSourceIds.toList());
+    notifyListeners();
+  }
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+  }
 }
 
 // ==================== Movie Provider ====================
@@ -145,8 +213,12 @@ class MovieProvider extends ChangeNotifier {
   bool _isSearching = false;
   String? _error;
 
+  // Per-category movie cache for home page sections
+  Map<int, List<MovieItem>> _categoryMovies = {};
+
   List<MovieCategory> get categories => _categories;
   List<MovieItem> get movies => _isSearching ? _searchResults : _movies;
+  List<MovieItem> getCategoryMovies(int typeId) => _categoryMovies[typeId] ?? _movies;
   int get currentPage => _currentPage;
   int get totalPages => _totalPages;
   int get selectedCategoryId => _selectedCategoryId;
@@ -170,6 +242,24 @@ class MovieProvider extends ChangeNotifier {
       _error = '加载失败: $e';
     }
     _isLoading = false;
+    notifyListeners();
+    // 后台加载各分类的前几条影视，用于首页区域展示
+    _loadCategoryPreviews(apiUrl);
+  }
+
+  Future<void> _loadCategoryPreviews(String apiUrl) async {
+    if (_categories.isEmpty) return;
+    final maxCat = _categories.length > 10 ? 10 : _categories.length;
+    for (int i = 0; i < maxCat; i++) {
+      try {
+        final cat = _categories[i];
+        final result = await _api.getMovieList(apiUrl: apiUrl, typeId: cat.typeId, page: 1);
+        final list = (result['list'] as List).cast<MovieItem>();
+        _categoryMovies[cat.typeId] = list;
+      } catch (e) {
+        debugPrint('加载分类 ${_categories[i].typeName} 预览失败: $e');
+      }
+    }
     notifyListeners();
   }
 

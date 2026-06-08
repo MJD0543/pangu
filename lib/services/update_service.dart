@@ -7,16 +7,18 @@ import 'package:path_provider/path_provider.dart';
 
 /// 更新信息
 class UpdateInfo {
-  final String version;       // 远端版本号，如 "1.0.1"
+  final String version;        // 远端版本号，如 "1.0.1"
   final String downloadUrl;    // 安装包下载地址
-  final String? changelog;   // 更新日志
+  final String? changelog;    // 更新日志
   final bool mandatory;        // 是否强制更新
+  final String assetKind;      // "exe" | "apk" | "7z" | "unknown"
 
   UpdateInfo({
     required this.version,
     required this.downloadUrl,
     this.changelog,
     this.mandatory = false,
+    this.assetKind = 'unknown',
   });
 
   factory UpdateInfo.fromJson(Map<String, dynamic> json) {
@@ -25,6 +27,7 @@ class UpdateInfo {
       downloadUrl: json['url'] as String,
       changelog: json['changelog'] as String?,
       mandatory: json['mandatory'] as bool? ?? false,
+      assetKind: json['kind'] as String? ?? 'unknown',
     );
   }
 }
@@ -55,6 +58,7 @@ class UpdateService {
   }
 
   /// 解析 GitHub Releases Latest API
+  /// 按平台优先选择下载资产: Windows→exe, Android→apk, 兜底→7z
   Future<UpdateInfo?> _checkGitHubReleases(String apiUrl) async {
     final resp = await _client.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 10));
     if (resp.statusCode != 200) return null;
@@ -62,23 +66,69 @@ class UpdateService {
     final tag = (data['tag_name'] as String).replaceAll(RegExp(r'^v'), '');
     final body = data['body'] as String? ?? '';
 
-    // 找第一个 exe 附件
     final assets = data['assets'] as List<dynamic>? ?? [];
-    String? exeUrl;
-    for (final asset in assets) {
-      final name = asset['name'] as String? ?? '';
-      if (name.endsWith('.exe')) {
-        exeUrl = asset['browser_download_url'] as String?;
-        break;
-      }
-    }
-    if (exeUrl == null) return null;
+    if (assets.isEmpty) return null;
+
+    // 平台感知: 按优先级匹配资产
+    final asset = _pickBestAsset(assets);
+    if (asset == null) return null;
+
     return UpdateInfo(
       version: tag,
-      downloadUrl: exeUrl,
+      downloadUrl: asset['url'] as String,
       changelog: body.isNotEmpty ? body : null,
       mandatory: false,
+      assetKind: asset['kind'] as String? ?? 'unknown',
     );
+  }
+
+  /// 从 GitHub Release Assets 中按平台选择最佳匹配合
+  /// Windows 优先 exe > 7z, Android 优先 apk, 兜底取第一个
+  Map<String, dynamic>? _pickBestAsset(List<dynamic> assets) {
+    if (assets.isEmpty) return null;
+
+    final isAndroid = Platform.isAndroid;
+    final isWindows = Platform.isWindows;
+
+    // 第一优先级: 精确平台匹配
+    for (final raw in assets) {
+      final a = raw as Map<String, dynamic>;
+      final name = (a['name'] as String? ?? '').toLowerCase();
+      final url = a['browser_download_url'] as String?;
+      if (url == null) continue;
+
+      if (isWindows && name.endsWith('.exe')) {
+        return {'url': url, 'kind': 'exe'};
+      }
+      if (isAndroid && name.endsWith('.apk')) {
+        return {'url': url, 'kind': 'apk'};
+      }
+    }
+
+    // 第二优先级: 通用 7z 便携包 (Windows 备选)
+    for (final raw in assets) {
+      final a = raw as Map<String, dynamic>;
+      final name = (a['name'] as String? ?? '').toLowerCase();
+      final url = a['browser_download_url'] as String?;
+      if (url == null) continue;
+
+      if (isWindows && name.endsWith('.7z')) {
+        return {'url': url, 'kind': '7z'};
+      }
+    }
+
+    // 兜底: 返回第一个资产
+    final first = assets[0] as Map<String, dynamic>;
+    final firstName = (first['name'] as String? ?? '').toLowerCase();
+    final firstUrl = first['browser_download_url'] as String?;
+    if (firstUrl == null) return null;
+
+    String kind = 'unknown';
+    if (firstName.endsWith('.exe')) kind = 'exe';
+    else if (firstName.endsWith('.apk')) kind = 'apk';
+    else if (firstName.endsWith('.7z')) kind = '7z';
+
+    return {'url': firstUrl, 'kind': kind};
   }
 
   /// 下载安装包，通过 [onProgress] 回调进度 (0.0 ~ 1.0)

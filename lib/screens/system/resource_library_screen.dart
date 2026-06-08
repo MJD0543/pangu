@@ -26,13 +26,16 @@ class _ResourceLibraryScreenState extends State<ResourceLibraryScreen> {
   List<VideoSource> _cachedSources = [];
   int _cachedSourcesHash = 0;
 
-  /// 合并所有源，带缓存以优化性能
+  /// 合并所有源，带缓存以优化性能；按 sortOrder 全局排序以支持跨类型拖拽
   List<VideoSource> _allSources(SourceProvider p) {
-    final movieHash = p.movieSources.fold<int>(0, (h, s) => h ^ s.id.hashCode);
-    final tvHash = p.tvSources.fold<int>(0, (h, s) => h ^ s.id.hashCode);
-    final newHash = movieHash ^ tvHash ^ p.movieSources.length ^ p.tvSources.length;
+    // XOR 是无序运算，A^1^B^0 = A^0^B^1，sortOrder 变了 hash 不变 → 缓存不刷新
+    // 改用有序拼接字符串做 hash
+    final movieKey = p.movieSources.map((s) => '${s.id}:${s.sortOrder}').join(',');
+    final tvKey = p.tvSources.map((s) => '${s.id}:${s.sortOrder}').join(',');
+    final newHash = Object.hash(movieKey, tvKey);
     if (newHash != _cachedSourcesHash) {
       _cachedSources = [...p.movieSources, ...p.tvSources];
+      _cachedSources.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
       _cachedSourcesHash = newHash;
     }
     return _cachedSources;
@@ -45,6 +48,8 @@ class _ResourceLibraryScreenState extends State<ResourceLibraryScreen> {
 
     return Consumer<SourceProvider>(
       builder: (ctx, prov, _) {
+        // Ensure teen mode settings are loaded
+        WidgetsBinding.instance.addPostFrameCallback((_) => prov.loadTeenModeSettings());
         final sources = _allSources(prov);
         return Scaffold(
           backgroundColor: bgColor,
@@ -288,7 +293,16 @@ class _ResourceLibraryScreenState extends State<ResourceLibraryScreen> {
         ),
         trailing: _selectionMode
           ? const Icon(Icons.drag_handle, color: Colors.grey)
-          : PopupMenuButton<String>(
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (prov.teenModeEnabled)
+                  Switch(
+                    value: prov.hiddenSourceIds.contains(s.id),
+                    onChanged: (_) => prov.toggleHiddenSource(s.id),
+                    activeColor: Colors.orange,
+                  ),
+                PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, size: 18),
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -322,6 +336,8 @@ class _ResourceLibraryScreenState extends State<ResourceLibraryScreen> {
                 if (v == 'delete') _confirmDelete(ctx, [s.id], prov);
               },
             ),
+            ],
+          ),
         onTap: _selectionMode ? () => _toggleSelect(s.id) : null,
         onLongPress: () {
           if (!_selectionMode) {

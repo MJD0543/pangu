@@ -76,10 +76,11 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _detectTV();
-    // 启动 3 秒后静默检测更新
+    // 启动 3 秒后静默检测更新，并加载青少年模式设置
     Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
         context.read<UpdateProvider>().checkForUpdates(silent: true);
+        context.read<SourceProvider>().loadTeenModeSettings();
       }
     });
   }
@@ -204,7 +205,7 @@ class _MainShellState extends State<MainShell> {
             child: IndexedStack(
               index: _currentIndex,
               children: [
-                const MovieScreen(),
+                MovieScreen(isActive: _currentIndex == 0),
                 TvScreen(isActive: _currentIndex == 1),
                 const SystemScreen(),
               ],
@@ -301,7 +302,7 @@ class _MainShellState extends State<MainShell> {
             child: IndexedStack(
               index: _currentIndex,
               children: [
-                const MovieScreen(),
+                MovieScreen(isActive: _currentIndex == 0),
                 TvScreen(isActive: _currentIndex == 1),
                 const SystemScreen(),
               ],
@@ -318,7 +319,7 @@ class _MainShellState extends State<MainShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          const MovieScreen(),
+          MovieScreen(isActive: _currentIndex == 0),
           TvScreen(isActive: _currentIndex == 1),
           const SystemScreen(),
         ],

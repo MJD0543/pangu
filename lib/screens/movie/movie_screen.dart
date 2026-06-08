@@ -1,4 +1,5 @@
 // lib/screens/movie/movie_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,7 +13,8 @@ import 'movie_player_screen.dart';
 import '../system/history_screen.dart';
 
 class MovieScreen extends StatefulWidget {
-  const MovieScreen({super.key});
+  final bool isActive;
+  const MovieScreen({super.key, this.isActive = true});
   @override
   State<MovieScreen> createState() => _MovieScreenState();
 }
@@ -23,12 +25,21 @@ class _MovieScreenState extends State<MovieScreen> {
   final _pinyinController = TextEditingController();
   bool _showSearch = false;
   String _lastLoadedSourceId = '';
+  Timer? _suggestTimer;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadIfNeeded());
+  }
+
+  @override
+  void didUpdateWidget(MovieScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadIfNeeded());
+    }
   }
 
   void _onScroll() {
@@ -66,8 +77,10 @@ class _MovieScreenState extends State<MovieScreen> {
         final src = srcProv.activeMovieSource;
         if (src == null) return _buildNoSource(ctx);
 
-        // 源切换由 _buildSourceSelector 的 onSelected 回调中的 _loadIfNeeded 处理
-        // 不在 build 中自动触发加载，避免与 initState 中的 _loadIfNeeded 重复
+        // 当源就绪且尚未加载时，自动触发加载
+        if (src.id != _lastLoadedSourceId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _loadIfNeeded());
+        }
 
         return Scaffold(
           backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
@@ -102,7 +115,7 @@ class _MovieScreenState extends State<MovieScreen> {
               const SizedBox(width: 8),
               Text(S.movie),
               const SizedBox(width: 8),
-              if (srcProv.movieSources.length > 1)
+              if (srcProv.visibleMovieSources.length > 1)
                 _buildSourceSelector(ctx, srcProv),
             ],
           ),
@@ -130,6 +143,7 @@ class _MovieScreenState extends State<MovieScreen> {
 
   Widget _buildSourceSelector(BuildContext ctx, SourceProvider srcProv) {
     final active = srcProv.activeMovieSource;
+    final sources = srcProv.visibleMovieSources;
     if (active == null) return const SizedBox.shrink();
     return PopupMenuButton<VideoSource>(
       initialValue: active,
@@ -138,7 +152,7 @@ class _MovieScreenState extends State<MovieScreen> {
         _lastLoadedSourceId = '';
         _loadIfNeeded();
       },
-      itemBuilder: (_) => srcProv.movieSources.map((s) => PopupMenuItem(
+      itemBuilder: (_) => sources.map((s) => PopupMenuItem(
         value: s,
         child: Row(
           children: [
@@ -216,7 +230,7 @@ class _MovieScreenState extends State<MovieScreen> {
                       onSubmitted: (val) {
                         final clean = val.trim().toUpperCase();
                         if (clean.isNotEmpty) {
-                          movProv.searchGlobal(srcProv.movieSources, clean, isLetter: false);
+                          movProv.searchGlobal(srcProv.visibleMovieSources, clean, isLetter: false);
                         }
                       },
                     ),
@@ -229,7 +243,7 @@ class _MovieScreenState extends State<MovieScreen> {
                     onPressed: () {
                       final clean = _pinyinController.text.trim().toUpperCase();
                       if (clean.isNotEmpty) {
-                        movProv.searchGlobal(srcProv.movieSources, clean, isLetter: false);
+                        movProv.searchGlobal(srcProv.visibleMovieSources, clean, isLetter: false);
                       }
                     },
                     style: ElevatedButton.styleFrom(
@@ -309,6 +323,16 @@ class _MovieScreenState extends State<MovieScreen> {
   }
 
   Widget _buildBody(BuildContext ctx, MovieProvider movProv, VideoSource src) {
+    if (movProv.isLoading) return _buildShimmerGrid(ctx);
+    if (movProv.error != null) return _buildError(ctx, movProv, src);
+    if (!_showSearch && movProv.movies.isEmpty && movProv.categories.isEmpty) {
+      return _buildEmpty(ctx);
+    }
+
+    // 搜索模式
+    if (_showSearch && movProv.isSearching && movProv.searchKeyword.isNotEmpty) {
+      return _buildMovieGrid(ctx, movProv.movies);
+    }
     if (_showSearch && movProv.searchKeyword.isEmpty && !movProv.isLoading) {
       return Center(
         child: Column(
@@ -322,10 +346,76 @@ class _MovieScreenState extends State<MovieScreen> {
         ),
       );
     }
-    if (movProv.isLoading) return _buildShimmerGrid(ctx);
-    if (movProv.error != null) return _buildError(ctx, movProv, src);
-    if (movProv.movies.isEmpty) return _buildEmpty(ctx);
 
+    // 首页：分类垂直展示，每个分类一行横向滚动卡片
+    if (movProv.selectedCategoryId == 0) {
+      return _buildHomeSections(ctx, movProv, src);
+    }
+
+    // 选中具体分类：网格展示
+    return _buildMovieGrid(ctx, movProv.movies);
+  }
+
+  /// 首页分类区域：每个分类一行横向滚动卡片
+  Widget _buildHomeSections(BuildContext ctx, MovieProvider movProv, VideoSource src) {
+    final cats = movProv.categories;
+    // 先显示主列表（全部），再显示各分类
+    final totalItems = 1 + cats.length;
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 8, bottom: 100),
+      itemCount: totalItems,
+      itemBuilder: (ctx, i) {
+        if (i == 0) {
+          return _buildCategorySection(ctx, movProv, src, null, null);
+        }
+        return _buildCategorySection(ctx, movProv, src, cats[i - 1], null);
+      },
+    );
+  }
+
+  /// 单个分类区域
+  Widget _buildCategorySection(BuildContext ctx, MovieProvider movProv, VideoSource src, MovieCategory? cat, String? customTitle) {
+    final title = customTitle ?? cat?.typeName ?? '全部';
+    final catId = cat?.typeId;
+    final movies = catId != null ? movProv.getCategoryMovies(catId) : movProv.movies;
+
+    if (movies.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 16, 14, 8),
+          child: Row(
+            children: [
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              if (cat != null)
+                GestureDetector(
+                  onTap: () => movProv.loadCategory(src.url, cat.typeId),
+                  child: Text('更多 >', style: TextStyle(fontSize: 12, color: AppTheme.primaryColor)),
+                ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            itemCount: movies.length.clamp(0, 20),
+            itemBuilder: (_, i) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: SizedBox(width: 120, child: _buildMovieCard(ctx, movies[i])),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 影视卡片网格
+  Widget _buildMovieGrid(BuildContext ctx, List<MovieItem> movies) {
     return TvGridFocusWrapper(
       child: GridView.builder(
         controller: _scrollController,
@@ -336,11 +426,10 @@ class _MovieScreenState extends State<MovieScreen> {
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
         ),
-        itemCount: movProv.movies.length + (movProv.isLoadingMore ? 6 : 0),
+        itemCount: movies.length + (context.read<MovieProvider>().isLoadingMore ? 6 : 0),
         itemBuilder: (_, i) {
-          if (i >= movProv.movies.length) return _buildShimmerCard();
-          final m = movProv.movies[i];
-          return _buildMovieCard(ctx, m);
+          if (i >= movies.length) return _buildShimmerCard();
+          return _buildMovieCard(ctx, movies[i]);
         },
       ),
     );
