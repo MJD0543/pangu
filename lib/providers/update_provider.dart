@@ -20,9 +20,10 @@ class UpdateProvider extends ChangeNotifier {
 
   // 更新检测地址（可配置）
   static const _kUpdateUrlKey = 'update_url';
+  static const _ghProxy = 'https://gh-proxy.com/';
   // 默认指向 GitHub Releases API，用户需替换为自己的仓库地址
   static const _kDefaultUpdateUrl =
-      'https://api.github.com/repos/MJD0543/pangu/releases/latest';
+      'https://api.github.com/repos/MJD0543/pangu-Releases/releases/latest';
 
   String? _updateUrl;
 
@@ -110,8 +111,14 @@ class UpdateProvider extends ChangeNotifier {
       final info = await _service.checkForUpdates(url);
       if (info == null) throw Exception('获取下载地址失败');
 
+      // GH 代理加速：下载 URL 前拼接加速地址
+      var downloadUrl = info.downloadUrl;
+      if (downloadUrl.contains('github.com') || downloadUrl.contains('githubusercontent.com')) {
+        downloadUrl = '$_ghProxy$downloadUrl';
+      }
+
       _installerPath = await _service.downloadUpdate(
-        info.downloadUrl,
+        downloadUrl,
         onProgress: (p) {
           _downloadProgress = p;
           notifyListeners();
@@ -129,24 +136,17 @@ class UpdateProvider extends ChangeNotifier {
   Future<void> installUpdate() async {
     if (_installerPath.isEmpty) return;
     try {
-      final script = await _createUpdateScript(_installerPath);
-      await Process.start(script, [], mode: ProcessStartMode.detached);
+      // 用 start 命令启动安装器：/b 不等待返回，安装器自带管理员提权
+      await Process.start(
+        'cmd',
+        ['/c', 'start', '', '/b', _installerPath],
+        mode: ProcessStartMode.detached,
+        runInShell: true,
+      );
+      // 给安装器的 UAC 弹窗留一点时间
+      await Future.delayed(const Duration(seconds: 1));
     } catch (_) {}
     exit(0);
-  }
-
-  /// 生成一个批处理脚本：等待 2 秒后运行安装包（此时主程序已退出）
-  Future<String> _createUpdateScript(String exePath) async {
-    final tempDir = await Directory.systemTemp.createTemp('pangu_update_');
-    final scriptFile = File('${tempDir.path}\\run_installer.bat');
-    final content = '''
-@echo off
-timeout /t 2 /nobreak >nul
-"$exePath"
-del "%~f0"
-''';
-    await scriptFile.writeAsString(content);
-    return scriptFile.path;
   }
 
   /// 比较远端版本 [remote] 是否比 [local] 新
