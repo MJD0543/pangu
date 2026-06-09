@@ -64,3 +64,6 @@ release/app_data.zip
 release/build/
 release/dist/
 release/*.spec
+
+# WorkBuddy
+.workbuddy
